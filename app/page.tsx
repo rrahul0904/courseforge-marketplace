@@ -1,0 +1,5 @@
+import Link from "next/link";
+
+export default function Home(){
+  return <main><section className="hero"><div><div className="eyebrow">Learn from people who do the work</div><h1>A course marketplace built for serious instructors and serious learners.</h1><p>CourseForge combines marketplace discovery with an instructor operating system: publishing, checkout, entitlements, learning delivery and payouts.</p><div className="actions"><Link className="button" href="/courses">Explore courses</Link><Link className="button secondary" href="/instructor/studio">Start teaching</Link></div></div><div className="stats"><div className="stat"><strong>85–95%</strong><span>Target instructor share by acquisition channel</span></div><div className="stat"><strong>Fail closed</strong><span>Server-side role checks for protected workflows</span></div><div className="stat"><strong>Order → Entitlement → Enrollment</strong><span>Verified payment is the only path to course access</span></div></div></section></main>
+}
