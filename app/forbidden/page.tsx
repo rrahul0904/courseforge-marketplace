@@ -1,0 +1,1 @@
+export default function ForbiddenPage(){return <main className="page"><div className="eyebrow">Access denied</div><h1>You do not have permission for this area.</h1><p className="muted">CourseForge enforces server-side role checks for instructor and administrator workflows.</p></main>}
