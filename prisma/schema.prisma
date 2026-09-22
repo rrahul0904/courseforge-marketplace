@@ -90,6 +90,7 @@ model InstructorProfile {
   payoutChargesEnabled   Boolean          @default(false)
   payoutsEnabled         Boolean          @default(false)
   payoutDetailsSubmitted Boolean          @default(false)
+  payoutReady            Boolean          @default(false)
   payoutStatusUpdatedAt  DateTime?
   courses                Course[]
   payouts                Payout[]
