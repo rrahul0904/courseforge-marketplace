@@ -83,6 +83,35 @@ export async function createStripeExpressLoginLink(accountId: string) {
   );
 }
 
+export async function createStripeCataloguePrice(input: {
+  courseId: string;
+  priceId: string;
+  productName: string;
+  amountCents: number;
+  currency: string;
+}) {
+  const productBody = new URLSearchParams();
+  productBody.set("name", input.productName);
+  productBody.set("metadata[courseforgeCourseId]", input.courseId);
+  const product = await stripeRequest<{ id: string }>("/products", {
+    method: "POST",
+    body: productBody,
+    headers: { "Idempotency-Key": `courseforge-product-${input.courseId}` }
+  });
+
+  const priceBody = new URLSearchParams();
+  priceBody.set("product", product.id);
+  priceBody.set("unit_amount", String(input.amountCents));
+  priceBody.set("currency", input.currency.toLowerCase());
+  priceBody.set("metadata[courseforgePriceId]", input.priceId);
+  const price = await stripeRequest<{ id: string }>("/prices", {
+    method: "POST",
+    body: priceBody,
+    headers: { "Idempotency-Key": `courseforge-price-${input.priceId}` }
+  });
+  return { productId: product.id, priceId: price.id };
+}
+
 export async function createStripeCheckoutSession(input: CheckoutInput) {
   const body = new URLSearchParams();
   body.set("mode", "payment");
