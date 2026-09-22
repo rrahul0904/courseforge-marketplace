@@ -72,6 +72,7 @@ model User {
   orders       Order[]
   reviews      Review[]
   entitlements Entitlement[]
+  certificates Certificate[]
 }
 
 model InstructorProfile {
@@ -116,6 +117,7 @@ model Course {
   products     Product[]
   enrollments  Enrollment[]
   reviews      Review[]
+  certificates Certificate[]
 }
 
 model Section {
@@ -179,10 +181,12 @@ model Order {
   netCents           Int
   platformFeeCents   Int         @default(0)
   instructorNetCents Int         @default(0)
+  refundedCents      Int         @default(0)
   paymentProvider    String
   providerPaymentId  String?     @unique
   acquisitionChannel String?
   paidAt             DateTime?
+  refundedAt         DateTime?
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
   items              OrderItem[]
@@ -229,6 +233,7 @@ model Enrollment {
   enrolledAt    DateTime     @default(now())
   completedAt   DateTime?
   progress      LessonProgress[]
+  certificate   Certificate?
 
   @@unique([userId, courseId])
 }
@@ -259,6 +264,21 @@ model Review {
   updatedAt          DateTime @updatedAt
 
   @@unique([userId, courseId])
+}
+
+model Certificate {
+  id               String     @id @default(cuid())
+  enrollmentId     String     @unique
+  enrollment       Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  userId           String
+  user             User       @relation(fields: [userId], references: [id])
+  courseId         String
+  course           Course     @relation(fields: [courseId], references: [id])
+  verificationCode String     @unique
+  issuedAt         DateTime   @default(now())
+  revokedAt        DateTime?
+
+  @@index([userId, courseId])
 }
 
 model Payout {
