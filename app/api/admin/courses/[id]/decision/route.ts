@@ -2,7 +2,7 @@ import { z } from "zod";
 import { requireRole } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
 import { assessPublishDecision } from "@/domain/publishing.mjs";
-import { persistedPayoutReadiness } from "@/domain/payout-readiness.mjs";
+import { syncStripePayoutStatus } from "@/lib/instructors/payouts";
 
 const schema = z.object({
   decision: z.enum(["PUBLISH", "RETURN_TO_DRAFT", "SUSPEND"])
@@ -43,6 +43,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return Response.json({ course: updated });
   }
 
+  let payoutReady = false;
+  if (course.instructor.status === "APPROVED" && course.instructor.payoutAccountId) {
+    try {
+      payoutReady = (await syncStripePayoutStatus(course.instructor.userId)).readiness.ready;
+    } catch {
+      payoutReady = false;
+    }
+  }
   const checkoutPriceCount = course.products.reduce(
     (sum, product) => sum + product.prices.filter((price) => price.active && price.providerPriceId).length,
     0
@@ -50,7 +58,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const readiness = assessPublishDecision({
     status: course.status,
     instructorApproved: course.instructor.status === "APPROVED",
-    payoutReady: persistedPayoutReadiness(course.instructor),
+    payoutReady,
     checkoutPriceCount
   });
   if (!readiness.ready) {
