@@ -3,6 +3,7 @@ import { requireRole } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
 import { createStripeCheckoutSession } from "@/lib/payments/stripe";
 import { AcquisitionChannel, splitTransactionalRevenue } from "@/domain/commerce.mjs";
+import { persistedPayoutReadiness } from "@/domain/payout-readiness.mjs";
 
 const schema = z.object({
   priceId: z.string().min(1),
@@ -18,10 +19,21 @@ export async function POST(request: Request) {
     where: { id: parsed.data.priceId },
     include: { product: { include: { course: { include: { instructor: true } } } } }
   });
-  if (!price?.active || !price.providerPriceId || !price.product.course?.instructor.payoutAccountId) {
+  const instructor = price?.product.course?.instructor;
+  if (
+    !price?.active ||
+    !price.providerPriceId ||
+    !instructor ||
+    instructor.status !== "APPROVED" ||
+    !persistedPayoutReadiness(instructor)
+  ) {
     return Response.json({ error: "This course is not checkout-ready" }, { status: 409 });
   }
-  const split = splitTransactionalRevenue({ netCents: price.amountCents, channel: parsed.data.acquisitionChannel });
+
+  const split = splitTransactionalRevenue({
+    netCents: price.amountCents,
+    channel: parsed.data.acquisitionChannel
+  });
   await db.user.upsert({
     where: { id: actor.sub },
     update: { email: actor.email, name: actor.name },
@@ -38,17 +50,24 @@ export async function POST(request: Request) {
       instructorNetCents: split.instructorCents,
       paymentProvider: "stripe",
       acquisitionChannel: parsed.data.acquisitionChannel,
-      items: { create: { productId: price.productId, unitPriceCents: price.amountCents, quantity: 1 } }
+      items: {
+        create: {
+          productId: price.productId,
+          unitPriceCents: price.amountCents,
+          quantity: 1
+        }
+      }
     }
   });
+
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? new URL(request.url).origin;
   const checkout = await createStripeCheckoutSession({
     orderId: order.id,
     providerPriceId: price.providerPriceId,
-    connectedAccountId: price.product.course.instructor.payoutAccountId,
+    connectedAccountId: instructor.payoutAccountId!,
     applicationFeeCents: split.platformCents,
     successUrl: `${appUrl}/orders/${order.id}/success`,
-    cancelUrl: `${appUrl}/courses/${price.product.course.slug}?checkout=cancelled`,
+    cancelUrl: `${appUrl}/courses/${price.product.course!.slug}?checkout=cancelled`,
     customerEmail: actor.email,
     acquisitionChannel: parsed.data.acquisitionChannel
   });
