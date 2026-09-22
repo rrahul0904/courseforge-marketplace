@@ -19,7 +19,8 @@ export default async function InstructorPayoutsPage() {
       <div className="row"><span>Details submitted</span><strong>{profile.payoutDetailsSubmitted ? "Yes" : "No"}</strong></div>
       <div className="row"><span>Charges enabled</span><strong>{profile.payoutChargesEnabled ? "Yes" : "No"}</strong></div>
       <div className="row"><span>Payouts enabled</span><strong>{profile.payoutsEnabled ? "Yes" : "No"}</strong></div>
-      <p className="muted">Checkout remains blocked until every readiness check above is satisfied.</p>
+      <div className="row"><span>Full payout readiness</span><strong>{profile.payoutReady ? "Ready" : "Blocked"}</strong></div>
+      <p className="muted">Critical commerce actions refresh readiness from Stripe live; this screen shows the latest persisted result.</p>
       <div className="actions">
         <form action="/instructor/payouts/start" method="post">
           <button className="button" type="submit">{profile.payoutAccountId ? "Continue Stripe onboarding" : "Connect Stripe"}</button>
