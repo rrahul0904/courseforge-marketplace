@@ -7,6 +7,20 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: courseforge
+          POSTGRES_PASSWORD: courseforge
+          POSTGRES_DB: courseforge
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U courseforge -d courseforge"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
       DATABASE_URL: postgresql://courseforge:courseforge@localhost:5432/courseforge
       COURSEFORGE_SESSION_SECRET: ci-only-courseforge-session-secret-123456789
@@ -18,5 +32,9 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: npm test
       - run: npm run prisma:validate
+      - run: npm run db:migrate:deploy
+      - run: npm run db:seed
+      - run: npm run db:seed
+      - run: npm run db:verify
       - run: npm run typecheck
       - run: npm run build
