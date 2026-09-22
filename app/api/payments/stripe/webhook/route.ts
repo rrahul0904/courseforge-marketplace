@@ -1,5 +1,6 @@
 import { getDb } from "@/lib/db";
 import { verifyStripeWebhookSignature } from "@/lib/payments/stripe";
+import { refundOutcome } from "@/domain/refunds.mjs";
 
 export async function POST(request: Request) {
   const rawBody = await request.text();
@@ -9,7 +10,14 @@ export async function POST(request: Request) {
   const event = JSON.parse(rawBody) as {
     id: string;
     type: string;
-    data?: { object?: { id?: string; payment_status?: string; payment_intent?: string | null; metadata?: Record<string, string> } };
+    data?: { object?: {
+      id?: string;
+      payment_status?: string;
+      payment_intent?: string | null;
+      amount?: number;
+      amount_refunded?: number;
+      metadata?: Record<string, string>;
+    } };
   };
   const db = getDb();
   const existing = await db.webhookEvent.findUnique({
@@ -49,6 +57,49 @@ export async function POST(request: Request) {
                   courseId: item.product.courseId,
                   entitlementId: entitlement.id
                 }
+              });
+            }
+          }
+        }
+        await tx.webhookEvent.create({
+          data: { provider: "stripe", providerEventId: event.id, eventType: event.type }
+        });
+      });
+    } else {
+      await db.webhookEvent.create({
+        data: { provider: "stripe", providerEventId: event.id, eventType: event.type }
+      });
+    }
+  } else if (event.type === "charge.refunded") {
+    const charge = event.data?.object;
+    const paymentIntentId = typeof charge?.payment_intent === "string" ? charge.payment_intent : null;
+    if (paymentIntentId && Number.isInteger(charge?.amount_refunded)) {
+      await db.$transaction(async (tx) => {
+        const order = await tx.order.findUnique({
+          where: { providerPaymentId: paymentIntentId },
+          include: { entitlements: { include: { enrollment: { include: { certificate: true } } } } }
+        });
+        if (!order) throw new Error(`Order for payment ${paymentIntentId} not found`);
+        const outcome = refundOutcome({ netCents: order.netCents, amountRefundedCents: charge?.amount_refunded ?? 0 });
+        await tx.order.update({
+          where: { id: order.id },
+          data: {
+            status: outcome.status,
+            refundedCents: outcome.refundedCents,
+            refundedAt: outcome.refundedCents > 0 ? new Date() : null
+          }
+        });
+        if (outcome.revokeEntitlements) {
+          const revokedAt = new Date();
+          await tx.entitlement.updateMany({
+            where: { orderId: order.id, status: "ACTIVE" },
+            data: { status: "REVOKED", revokedAt }
+          });
+          for (const entitlement of order.entitlements) {
+            if (entitlement.enrollment?.certificate && !entitlement.enrollment.certificate.revokedAt) {
+              await tx.certificate.update({
+                where: { id: entitlement.enrollment.certificate.id },
+                data: { revokedAt }
               });
             }
           }
