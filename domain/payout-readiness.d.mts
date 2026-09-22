@@ -17,7 +17,5 @@ export type StripeAccountReadiness = {
 export function stripeAccountReadiness(account: StripeAccountLike | null | undefined): StripeAccountReadiness;
 export function persistedPayoutReadiness(profile: {
   payoutAccountId?: string | null;
-  payoutChargesEnabled?: boolean;
-  payoutsEnabled?: boolean;
-  payoutDetailsSubmitted?: boolean;
+  payoutReady?: boolean;
 } | null | undefined): boolean;
