@@ -14,10 +14,73 @@ type CheckoutInput = {
   acquisitionChannel: string;
 };
 
+export type StripeConnectedAccount = {
+  id: string;
+  charges_enabled?: boolean;
+  payouts_enabled?: boolean;
+  details_submitted?: boolean;
+  requirements?: {
+    currently_due?: string[];
+    eventually_due?: string[];
+    disabled_reason?: string | null;
+  } | null;
+};
+
 function stripeSecretKey() {
   const key = process.env.STRIPE_SECRET_KEY;
   if (!key) throw new Error("STRIPE_SECRET_KEY is not configured");
   return key;
+}
+
+async function stripeRequest<T>(path: string, init: RequestInit = {}) {
+  const response = await fetch(`${STRIPE_API}${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${stripeSecretKey()}`,
+      ...(init.body ? { "Content-Type": "application/x-www-form-urlencoded" } : {}),
+      ...(init.headers ?? {})
+    },
+    cache: "no-store"
+  });
+  const payload = (await response.json()) as T & { error?: { message?: string } };
+  if (!response.ok) throw new Error(payload.error?.message ?? `Stripe request failed: ${path}`);
+  return payload;
+}
+
+export async function createStripeExpressAccount(input: { email: string; instructorId: string }) {
+  const body = new URLSearchParams();
+  body.set("type", "express");
+  body.set("country", process.env.STRIPE_CONNECT_COUNTRY ?? "US");
+  body.set("email", input.email);
+  body.set("capabilities[card_payments][requested]", "true");
+  body.set("capabilities[transfers][requested]", "true");
+  body.set("metadata[courseforgeInstructorId]", input.instructorId);
+  return stripeRequest<StripeConnectedAccount>("/accounts", { method: "POST", body });
+}
+
+export async function retrieveStripeConnectedAccount(accountId: string) {
+  return stripeRequest<StripeConnectedAccount>(`/accounts/${encodeURIComponent(accountId)}`);
+}
+
+export async function createStripeAccountLink(input: {
+  accountId: string;
+  refreshUrl: string;
+  returnUrl: string;
+}) {
+  const body = new URLSearchParams();
+  body.set("account", input.accountId);
+  body.set("refresh_url", input.refreshUrl);
+  body.set("return_url", input.returnUrl);
+  body.set("type", "account_onboarding");
+  body.set("collection_options[fields]", "eventually_due");
+  return stripeRequest<{ url: string; expires_at?: number }>("/account_links", { method: "POST", body });
+}
+
+export async function createStripeExpressLoginLink(accountId: string) {
+  return stripeRequest<{ url: string }>(
+    `/accounts/${encodeURIComponent(accountId)}/login_links`,
+    { method: "POST", body: new URLSearchParams() }
+  );
 }
 
 export async function createStripeCheckoutSession(input: CheckoutInput) {
@@ -35,20 +98,11 @@ export async function createStripeCheckoutSession(input: CheckoutInput) {
   body.set("payment_intent_data[transfer_data][destination]", input.connectedAccountId);
   body.set("payment_intent_data[metadata][orderId]", input.orderId);
 
-  const response = await fetch(`${STRIPE_API}/checkout/sessions`, {
+  const payload = await stripeRequest<{ id: string; url: string }>("/checkout/sessions", {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${stripeSecretKey()}`,
-      "Content-Type": "application/x-www-form-urlencoded"
-    },
-    body,
-    cache: "no-store"
+    body
   });
-
-  const payload = (await response.json()) as { id?: string; url?: string; error?: { message?: string } };
-  if (!response.ok || !payload.id || !payload.url) {
-    throw new Error(payload.error?.message ?? "Stripe Checkout session creation failed");
-  }
+  if (!payload.id || !payload.url) throw new Error("Stripe Checkout session creation failed");
   return { id: payload.id, url: payload.url };
 }
 
