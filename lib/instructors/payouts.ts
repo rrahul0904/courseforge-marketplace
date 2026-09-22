@@ -17,6 +17,7 @@ async function persistStripeReadiness(userId: string, account: Awaited<ReturnTyp
       payoutChargesEnabled: readiness.chargesEnabled,
       payoutsEnabled: readiness.payoutsEnabled,
       payoutDetailsSubmitted: readiness.detailsSubmitted,
+      payoutReady: readiness.ready,
       payoutStatusUpdatedAt: new Date()
     }
   });
