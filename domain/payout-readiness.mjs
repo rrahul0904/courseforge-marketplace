@@ -20,8 +20,6 @@ export function stripeAccountReadiness(account) {
 export function persistedPayoutReadiness(profile) {
   return Boolean(
     profile?.payoutAccountId &&
-    profile?.payoutChargesEnabled &&
-    profile?.payoutsEnabled &&
-    profile?.payoutDetailsSubmitted
+    profile?.payoutReady === true
   );
 }
