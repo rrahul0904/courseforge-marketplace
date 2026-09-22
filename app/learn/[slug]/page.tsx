@@ -1,6 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
+import { completionPercent } from "@/domain/learning.mjs";
+import LearningActions from "./LearningActions";
 
 export default async function LearnCoursePage({ params }: { params: Promise<{ slug: string }> }) {
   const actor = await requireRole("STUDENT", "/library");
@@ -28,6 +30,9 @@ export default async function LearnCoursePage({ params }: { params: Promise<{ sl
   const completed = new Set(
     enrollment.progress.filter((item) => item.completedAt).map((item) => item.lessonId)
   );
+  const lessonIds = course.sections.flatMap((section) => section.lessons.map((lesson) => lesson.id));
+  const completedLessons = lessonIds.filter((lessonId) => completed.has(lessonId)).length;
+  const progressPercent = completionPercent({ totalLessons: lessonIds.length, completedLessons });
 
   return <main className="page">
     <div className="eyebrow">Learning workspace</div>
@@ -44,5 +49,6 @@ export default async function LearnCoursePage({ params }: { params: Promise<{ sl
         </div>
       </section>)}
     </div>
+    <LearningActions courseId={course.id} progressPercent={progressPercent} />
   </main>;
 }
