@@ -1,0 +1,14 @@
+import "dotenv/config";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaClient } from "../generated/prisma/client";
+const url=process.env.DATABASE_URL;
+if(!url) throw new Error("DATABASE_URL is not configured");
+const db=new PrismaClient({adapter:new PrismaPg({connectionString:url})});
+const course=await db.course.findUnique({where:{slug:"database-certification-course"},include:{instructor:true,products:{include:{prices:true}}}});
+if(!course || course.status!=="PUBLISHED") throw new Error("seeded published course missing");
+if(course.instructor.status!=="APPROVED") throw new Error("seeded instructor not approved");
+const price=course.products[0]?.prices[0];
+if(!price || price.amountCents!==9900) throw new Error("seeded price missing");
+if(price.providerPriceId!==null || course.instructor.payoutAccountId!==null) throw new Error("seed must not fake Stripe readiness");
+console.log("DB certification verified: migration graph + fail-closed Stripe seed state.");
+await db.$disconnect();
