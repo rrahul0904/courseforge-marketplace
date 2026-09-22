@@ -24,12 +24,8 @@ test("outstanding Stripe requirements block marketplace checkout readiness", () 
   assert.deepEqual(result.blockers, ["requirements_due"]);
 });
 
-test("a connected account id alone is not sufficient payout readiness", () => {
+test("a connected account id or partial booleans are not sufficient payout readiness", () => {
   assert.equal(persistedPayoutReadiness({ payoutAccountId: "acct_123" }), false);
-  assert.equal(persistedPayoutReadiness({
-    payoutAccountId: "acct_123",
-    payoutChargesEnabled: true,
-    payoutsEnabled: true,
-    payoutDetailsSubmitted: true
-  }), true);
+  assert.equal(persistedPayoutReadiness({ payoutAccountId: "acct_123", payoutReady: false }), false);
+  assert.equal(persistedPayoutReadiness({ payoutAccountId: "acct_123", payoutReady: true }), true);
 });
