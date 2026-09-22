@@ -1,6 +1,6 @@
 import { requireRole } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
-import { persistedPayoutReadiness } from "@/domain/payout-readiness.mjs";
+import { syncStripePayoutStatus } from "@/lib/instructors/payouts";
 import { createStripeCataloguePrice } from "@/lib/payments/stripe";
 
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -8,8 +8,18 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   const { id } = await params;
   const db = getDb();
   const profile = await db.instructorProfile.findUnique({ where: { userId: actor.sub } });
-  if (!profile || profile.status !== "APPROVED" || !persistedPayoutReadiness(profile)) {
-    return Response.json({ error: "Payout-ready approved instructor required" }, { status: 409 });
+  if (!profile || profile.status !== "APPROVED" || !profile.payoutAccountId) {
+    return Response.json({ error: "Approved connected instructor required" }, { status: 409 });
+  }
+
+  let payoutStatus;
+  try {
+    payoutStatus = await syncStripePayoutStatus(actor.sub);
+  } catch {
+    return Response.json({ error: "Payout readiness could not be verified" }, { status: 503 });
+  }
+  if (!payoutStatus.readiness.ready) {
+    return Response.json({ error: "Payout-ready instructor required", gaps: payoutStatus.readiness.blockers }, { status: 409 });
   }
 
   const price = await db.price.findUnique({
