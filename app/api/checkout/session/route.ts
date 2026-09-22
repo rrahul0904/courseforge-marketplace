@@ -2,8 +2,8 @@ import { z } from "zod";
 import { requireRole } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
 import { createStripeCheckoutSession } from "@/lib/payments/stripe";
+import { syncStripePayoutStatus } from "@/lib/instructors/payouts";
 import { AcquisitionChannel, splitTransactionalRevenue } from "@/domain/commerce.mjs";
-import { persistedPayoutReadiness } from "@/domain/payout-readiness.mjs";
 import { verifyReferralToken } from "@/domain/referral.mjs";
 
 const schema = z.object({
@@ -30,8 +30,18 @@ export async function POST(request: Request) {
     !instructor ||
     course.status !== "PUBLISHED" ||
     instructor.status !== "APPROVED" ||
-    !persistedPayoutReadiness(instructor)
+    !instructor.payoutAccountId
   ) {
+    return Response.json({ error: "This course is not checkout-ready" }, { status: 409 });
+  }
+
+  let payoutStatus;
+  try {
+    payoutStatus = await syncStripePayoutStatus(instructor.userId);
+  } catch {
+    return Response.json({ error: "Instructor payout readiness could not be verified" }, { status: 503 });
+  }
+  if (!payoutStatus.readiness.ready || !payoutStatus.profile?.payoutAccountId) {
     return Response.json({ error: "This course is not checkout-ready" }, { status: 409 });
   }
 
@@ -86,7 +96,7 @@ export async function POST(request: Request) {
   const checkout = await createStripeCheckoutSession({
     orderId: order.id,
     providerPriceId: price.providerPriceId,
-    connectedAccountId: instructor.payoutAccountId!,
+    connectedAccountId: payoutStatus.profile.payoutAccountId,
     applicationFeeCents: split.platformCents,
     successUrl: `${appUrl}/orders/${order.id}/success`,
     cancelUrl: `${appUrl}/courses/${course.slug}?checkout=cancelled`,
