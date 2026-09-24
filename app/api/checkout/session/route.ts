@@ -45,7 +45,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "This course is not checkout-ready" }, { status: 409 });
   }
 
-  let acquisitionChannel = AcquisitionChannel.MARKETPLACE;
+  let acquisitionChannel: "marketplace" | "instructor_referral" = AcquisitionChannel.MARKETPLACE;
   if (parsed.data.referralToken) {
     const referral = verifyReferralToken(
       parsed.data.referralToken,

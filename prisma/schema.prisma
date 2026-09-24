@@ -61,18 +61,21 @@ enum PayoutStatus {
 }
 
 model User {
-  id           String             @id
-  email        String             @unique
-  name         String?
-  role         UserRole           @default(STUDENT)
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
-  instructor   InstructorProfile?
-  enrollments  Enrollment[]
-  orders       Order[]
-  reviews      Review[]
-  entitlements Entitlement[]
-  certificates Certificate[]
+  id               String             @id
+  email            String             @unique
+  name             String?
+  role             UserRole           @default(STUDENT)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  instructor       InstructorProfile?
+  enrollments      Enrollment[]
+  orders           Order[]
+  reviews          Review[]
+  entitlements     Entitlement[]
+  certificates     Certificate[]
+  questionAttempts QuestionAttempt[]
+  bookmarks        Bookmark[]
+  learnerNotes     LearnerNote[]
 }
 
 model InstructorProfile {
@@ -99,10 +102,22 @@ model InstructorProfile {
   updatedAt              DateTime         @updatedAt
 }
 
+model Track {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  title       String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  courses     Course[]
+}
+
 model Course {
   id           String            @id @default(cuid())
   instructorId String
   instructor   InstructorProfile @relation(fields: [instructorId], references: [id])
+  trackId      String?
+  track        Track?            @relation(fields: [trackId], references: [id], onDelete: SetNull)
   slug         String            @unique
   title        String
   subtitle     String?
@@ -114,10 +129,13 @@ model Course {
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
   sections     Section[]
+  modules      Module[]
   products     Product[]
   enrollments  Enrollment[]
   reviews      Review[]
   certificates Certificate[]
+
+  @@index([trackId])
 }
 
 model Section {
@@ -145,6 +163,110 @@ model Lesson {
   progress        LessonProgress[]
 
   @@unique([sectionId, position])
+}
+
+model Module {
+  id        String              @id @default(cuid())
+  courseId  String
+  course    Course              @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  title     String
+  position  Int
+  questions InterviewQuestion[]
+
+  @@unique([courseId, position])
+}
+
+model InterviewQuestion {
+  id               String             @id @default(cuid())
+  moduleId         String
+  module           Module             @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  slug             String
+  title            String
+  prompt           String
+  previewPrompt    String?
+  questionType     String             @default("interview")
+  difficulty       String
+  expectedMinutes  Int?
+  answerFramework  String
+  explanation      String?
+  rubricJson       Json
+  followUpPrompts  String[]
+  tags             String[]
+  roleTags         String[]
+  companyClaimTags String[]
+  contentVersionId String
+  previewable      Boolean            @default(false)
+  publishedAt      DateTime?
+  retiredAt        DateTime?
+  evidence         QuestionEvidence[]
+  attempts         QuestionAttempt[]
+  bookmarks        Bookmark[]
+  notes            LearnerNote[]
+
+  @@unique([moduleId, slug])
+  @@index([previewable, publishedAt])
+}
+
+model QuestionEvidence {
+  id          String            @id @default(cuid())
+  questionId  String
+  question    InterviewQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  evidenceType String
+  sourceUrl   String?
+  sourceLabel String?
+  observedAt  DateTime?
+  claimText   String?
+  claimStatus String            @default("EDITORIAL_SYNTHESIS")
+  confidence  Int?
+  reviewerId  String?
+  reviewedAt  DateTime?
+  createdAt   DateTime          @default(now())
+
+  @@index([questionId, claimStatus])
+}
+
+model QuestionAttempt {
+  id                 String            @id @default(cuid())
+  learnerId          String
+  learner            User              @relation(fields: [learnerId], references: [id], onDelete: Cascade)
+  questionId         String
+  question           InterviewQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  contentVersionId   String
+  mode               String            @default("TOPIC_DRILL")
+  responseText       String?
+  selectedRubricIds  String[]
+  selfScore          Int?
+  deterministicScore Int
+  durationMs         Int?
+  revealedAnswerAt   DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime          @default(now())
+
+  @@index([learnerId, questionId, createdAt])
+}
+
+model Bookmark {
+  id         String            @id @default(cuid())
+  userId     String
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questionId String
+  question   InterviewQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  createdAt  DateTime          @default(now())
+
+  @@unique([userId, questionId])
+}
+
+model LearnerNote {
+  id         String            @id @default(cuid())
+  userId     String
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questionId String
+  question   InterviewQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  body       String
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  @@unique([userId, questionId])
 }
 
 model Product {
