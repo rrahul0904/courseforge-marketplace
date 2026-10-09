@@ -60,6 +60,44 @@ enum PayoutStatus {
   HELD
 }
 
+enum CohortStatus {
+  DRAFT
+  OPEN
+  CLOSED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum CohortSeatStatus {
+  RESERVED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum CohortEventType {
+  LIVE_SESSION
+  BUILD_LAB
+  OFFICE_HOUR
+  WORKSHOP
+  CAPSTONE_REVIEW
+  NETWORKING
+}
+
+enum CapstoneStatus {
+  DRAFT
+  SUBMITTED
+  IN_REVIEW
+  CHANGES_REQUESTED
+  APPROVED
+}
+
+enum CapstoneReviewDecision {
+  CHANGES_REQUESTED
+  APPROVED
+}
+
 model User {
   id           String             @id
   email        String             @unique
@@ -95,29 +133,32 @@ model InstructorProfile {
   payoutStatusUpdatedAt  DateTime?
   courses                Course[]
   payouts                Payout[]
+  capstoneReviews        CapstoneReview[]
   createdAt              DateTime         @default(now())
   updatedAt              DateTime         @updatedAt
 }
 
 model Course {
-  id           String            @id @default(cuid())
-  instructorId String
-  instructor   InstructorProfile @relation(fields: [instructorId], references: [id])
-  slug         String            @unique
-  title        String
-  subtitle     String?
-  description  String
-  category     String
-  level        String
-  status       CourseStatus      @default(DRAFT)
-  publishedAt  DateTime?
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
-  sections     Section[]
-  products     Product[]
-  enrollments  Enrollment[]
-  reviews      Review[]
-  certificates Certificate[]
+  id               String            @id @default(cuid())
+  instructorId     String
+  instructor       InstructorProfile @relation(fields: [instructorId], references: [id])
+  slug             String            @unique
+  title            String
+  subtitle         String?
+  description      String
+  category         String
+  level            String
+  status           CourseStatus      @default(DRAFT)
+  requiresCapstone Boolean           @default(false)
+  publishedAt      DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  sections         Section[]
+  products         Product[]
+  enrollments      Enrollment[]
+  reviews          Review[]
+  certificates     Certificate[]
+  cohorts          Cohort[]
 }
 
 model Section {
@@ -223,17 +264,19 @@ model Entitlement {
 }
 
 model Enrollment {
-  id            String       @id @default(cuid())
-  userId        String
-  courseId      String
-  entitlementId String?      @unique
-  user          User         @relation(fields: [userId], references: [id])
-  course        Course       @relation(fields: [courseId], references: [id])
-  entitlement   Entitlement? @relation(fields: [entitlementId], references: [id])
-  enrolledAt    DateTime     @default(now())
-  completedAt   DateTime?
-  progress      LessonProgress[]
-  certificate   Certificate?
+  id                   String               @id @default(cuid())
+  userId               String
+  courseId             String
+  entitlementId        String?              @unique
+  user                 User                 @relation(fields: [userId], references: [id])
+  course               Course               @relation(fields: [courseId], references: [id])
+  entitlement          Entitlement?         @relation(fields: [entitlementId], references: [id])
+  enrolledAt           DateTime             @default(now())
+  completedAt          DateTime?
+  progress             LessonProgress[]
+  certificate          Certificate?
+  cohortSeats          CohortSeat[]
+  capstoneSubmissions  CapstoneSubmission[]
 
   @@unique([userId, courseId])
 }
@@ -249,6 +292,86 @@ model LessonProgress {
   updatedAt       DateTime   @updatedAt
 
   @@unique([enrollmentId, lessonId])
+}
+
+model Cohort {
+  id                 String       @id @default(cuid())
+  courseId           String
+  course             Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  slug               String       @unique
+  name               String
+  status             CohortStatus @default(DRAFT)
+  startsAt           DateTime
+  endsAt             DateTime
+  enrollmentOpensAt  DateTime?
+  enrollmentClosesAt DateTime?
+  capacity           Int?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  seats              CohortSeat[]
+  events             CohortEvent[]
+
+  @@index([courseId, status, startsAt])
+}
+
+model CohortSeat {
+  id           String           @id @default(cuid())
+  enrollmentId String
+  cohortId     String
+  enrollment   Enrollment       @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  cohort       Cohort           @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  status       CohortSeatStatus @default(RESERVED)
+  reservedAt   DateTime         @default(now())
+  activatedAt  DateTime?
+  completedAt  DateTime?
+  cancelledAt  DateTime?
+
+  @@unique([enrollmentId, cohortId])
+  @@index([cohortId, status])
+}
+
+model CohortEvent {
+  id           String          @id @default(cuid())
+  cohortId     String
+  cohort       Cohort          @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  type         CohortEventType
+  title        String
+  startsAt     DateTime
+  endsAt       DateTime
+  joinUrl      String?
+  recordingUrl String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@index([cohortId, startsAt])
+}
+
+model CapstoneSubmission {
+  id           String             @id @default(cuid())
+  enrollmentId String
+  enrollment   Enrollment         @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  revision     Int
+  status       CapstoneStatus     @default(DRAFT)
+  artifactUrl  String?
+  summary      String?
+  submittedAt  DateTime?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  review       CapstoneReview?
+
+  @@unique([enrollmentId, revision])
+  @@index([enrollmentId, status])
+}
+
+model CapstoneReview {
+  id           String                    @id @default(cuid())
+  submissionId String                    @unique
+  submission   CapstoneSubmission        @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  reviewerId   String
+  reviewer     InstructorProfile         @relation(fields: [reviewerId], references: [id])
+  decision     CapstoneReviewDecision
+  feedback     String?
+  reviewedAt   DateTime                  @default(now())
 }
 
 model Review {

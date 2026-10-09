@@ -2,7 +2,15 @@
 
 import { useState } from "react";
 
-export default function LearningActions({ courseId, progressPercent }: { courseId: string; progressPercent: number }) {
+export default function LearningActions({
+  courseId,
+  progressPercent,
+  requiresCapstone
+}: {
+  courseId: string;
+  progressPercent: number;
+  requiresCapstone: boolean;
+}) {
   const [rating, setRating] = useState(5);
   const [body, setBody] = useState("");
   const [message, setMessage] = useState<string | null>(null);
@@ -31,7 +39,8 @@ export default function LearningActions({ courseId, progressPercent }: { courseI
       setCertificateUrl(`/certificates/${payload.certificate.verificationCode}`);
       setMessage("Certificate issued and ready to verify publicly.");
     } else {
-      setMessage(payload.error ?? "Unable to issue certificate.");
+      const reason = payload.reason ? ` (${String(payload.reason).replaceAll("_", " ").toLowerCase()})` : "";
+      setMessage(`${payload.error ?? "Unable to issue certificate."}${reason}`);
     }
   }
 
@@ -49,7 +58,11 @@ export default function LearningActions({ courseId, progressPercent }: { courseI
       </div>
       <div>
         <h3>Completion certificate</h3>
-        <p className="muted">Issued only at 100% completion with an active entitlement.</p>
+        <p className="muted">
+          {requiresCapstone
+            ? "Requires 100% lesson completion plus faculty approval of your latest capstone revision."
+            : "Issued only at 100% completion with an active entitlement."}
+        </p>
         <button className="button secondary" type="button" onClick={issueCertificate}>Issue certificate</button>
         {certificateUrl ? <p><a href={certificateUrl}>Open certificate verification</a></p> : null}
       </div>

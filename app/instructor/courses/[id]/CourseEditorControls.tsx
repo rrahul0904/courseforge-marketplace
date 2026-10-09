@@ -10,7 +10,8 @@ export default function CourseEditorControls({
   sections,
   priceId,
   providerPriceId,
-  payoutReady
+  payoutReady,
+  requiresCapstone
 }: {
   courseId: string;
   status: string;
@@ -18,6 +19,7 @@ export default function CourseEditorControls({
   priceId?: string;
   providerPriceId?: string | null;
   payoutReady: boolean;
+  requiresCapstone: boolean;
 }) {
   const [message, setMessage] = useState("");
   const draft = status === "DRAFT";
@@ -67,12 +69,24 @@ export default function CourseEditorControls({
     if (payload) window.location.reload();
   }
 
+  async function toggleCapstone() {
+    const payload = await request(`/api/instructor/courses/${courseId}/learning-mode`, { requiresCapstone: !requiresCapstone });
+    if (payload) window.location.reload();
+  }
+
   async function submitReview() {
     const payload = await request(`/api/instructor/courses/${courseId}/submit`);
     if (payload) window.location.reload();
   }
 
   return <div className="list">
+    {draft ? <div className="panel">
+      <h3>Applied completion</h3>
+      <p className="muted">Capstone mode makes certification depend on faculty approval of the learner's latest submitted artifact revision.</p>
+      <p>Capstone requirement: <strong>{requiresCapstone ? "Required" : "Not required"}</strong></p>
+      <button className="button secondary" type="button" onClick={toggleCapstone}>{requiresCapstone ? "Remove capstone requirement" : "Require capstone"}</button>
+    </div> : null}
+
     {draft ? <form className="panel" onSubmit={addSection}>
       <h3>Add section</h3>
       <label>Section title<input name="title" required minLength={2} /></label>
