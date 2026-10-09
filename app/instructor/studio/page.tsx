@@ -34,6 +34,7 @@ export default async function Studio() {
     <p className="muted">Signed in as {actor.email} · Instructor status {profile.status}</p>
     <div className="actions">
       <Link className="button" href="/instructor/courses/new">Create course</Link>
+      <Link className="button secondary" href="/instructor/capstones">Review capstones</Link>
       <Link className="button secondary" href="/instructor/payouts">{payoutReady ? "Payouts ready" : "Finish payout setup"}</Link>
     </div>
     <div className="section">
