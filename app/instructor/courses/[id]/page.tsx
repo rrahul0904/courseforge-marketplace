@@ -50,6 +50,7 @@ export default async function InstructorCoursePage({ params }: { params: Promise
       priceId={price?.id}
       providerPriceId={price?.providerPriceId}
       payoutReady={persistedPayoutReadiness(profile)}
+      requiresCapstone={course.requiresCapstone}
     />
     <div className="section">
       <h2>Cohorts and live schedule</h2>
