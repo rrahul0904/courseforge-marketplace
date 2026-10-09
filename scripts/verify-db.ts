@@ -24,14 +24,18 @@ if (price.providerPriceId !== null || course.instructor.payoutAccountId !== null
 const enrollment = await db.enrollment.findUnique({
   where: { id: "seed_enrollment" },
   include: {
-    cohortSeats: { include: { cohort: true }, orderBy: { reservedAt: "asc" } },
+    cohortSeats: { include: { cohort: true } },
     capstoneSubmissions: { include: { review: true }, orderBy: { revision: "asc" } }
   }
 });
 if (!enrollment) throw new Error("seeded enrollment missing");
 if (enrollment.cohortSeats.length !== 2) throw new Error("one enrollment must retain original cohort and retake seat");
 if (new Set(enrollment.cohortSeats.map((seat) => seat.enrollmentId)).size !== 1) throw new Error("retake must reuse the original enrollment");
-if (enrollment.cohortSeats[0]?.status !== "COMPLETED" || enrollment.cohortSeats[1]?.status !== "RESERVED") throw new Error("cohort seat history is not preserved");
+const originalSeat = enrollment.cohortSeats.find((seat) => seat.cohort.slug === "database-certification-summer-2026");
+const retakeSeat = enrollment.cohortSeats.find((seat) => seat.cohort.slug === "database-certification-fall-2026");
+if (originalSeat?.status !== "COMPLETED" || retakeSeat?.status !== "RESERVED") {
+  throw new Error("cohort seat history is not preserved by cohort identity");
+}
 if (enrollment.capstoneSubmissions.length !== 2) throw new Error("capstone revision history missing");
 if (enrollment.capstoneSubmissions[0]?.status !== "CHANGES_REQUESTED") throw new Error("first capstone review history missing");
 const latest = enrollment.capstoneSubmissions[1];
