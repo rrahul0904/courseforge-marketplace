@@ -5,6 +5,7 @@ import { completionPercent } from "@/domain/learning.mjs";
 import { cohortLearningSpaceDecision, eventRecordingState } from "@/domain/cohort-learning.mjs";
 import LearningActions from "./LearningActions";
 import CapstoneActions from "./CapstoneActions";
+import CohortPicker from "./CohortPicker";
 
 export default async function LearnCoursePage({ params }: { params: Promise<{ slug: string }> }) {
   const actor = await requireRole("STUDENT", "/library");
@@ -14,7 +15,19 @@ export default async function LearnCoursePage({ params }: { params: Promise<{ sl
     where: { slug },
     include: {
       instructor: true,
-      cohorts: { select: { id: true } },
+      cohorts: {
+        select: {
+          id: true,
+          name: true,
+          status: true,
+          startsAt: true,
+          endsAt: true,
+          enrollmentOpensAt: true,
+          enrollmentClosesAt: true,
+          capacity: true
+        },
+        orderBy: { startsAt: "asc" }
+      },
       sections: { include: { lessons: { orderBy: { position: "asc" } } }, orderBy: { position: "asc" } }
     }
   });
@@ -39,8 +52,29 @@ export default async function LearnCoursePage({ params }: { params: Promise<{ sl
     .filter((seat) => new Set(["RESERVED", "ACTIVE", "COMPLETED"]).has(seat.status))
     .sort((a, b) => b.cohort.startsAt.getTime() - a.cohort.startsAt.getTime());
   const currentSeat = eligibleSeats[0] ?? null;
-  if (course.cohorts.length > 0) {
-    const access = cohortLearningSpaceDecision({ entitlement, seatStatus: currentSeat?.status ?? "MISSING" });
+  if (course.cohorts.length > 0 && !currentSeat) {
+    const now = Date.now();
+    const reservable = course.cohorts.filter((cohort) => {
+      if (cohort.status !== "OPEN") return false;
+      if (cohort.enrollmentOpensAt && cohort.enrollmentOpensAt.getTime() > now) return false;
+      if (cohort.enrollmentClosesAt && cohort.enrollmentClosesAt.getTime() <= now) return false;
+      return true;
+    });
+    return <main className="page">
+      <div className="eyebrow">Learning workspace</div>
+      <h1>{course.title}</h1>
+      <p className="muted">Your entitlement is active. A cohort seat is required before live learning content opens.</p>
+      <CohortPicker cohorts={reservable.map((cohort) => ({
+        id: cohort.id,
+        name: cohort.name,
+        startsAt: cohort.startsAt.toISOString(),
+        endsAt: cohort.endsAt.toISOString(),
+        capacity: cohort.capacity
+      }))} />
+    </main>;
+  }
+  if (currentSeat) {
+    const access = cohortLearningSpaceDecision({ entitlement, seatStatus: currentSeat.status });
     if (!access.allowed) redirect(`/courses/${course.slug}?cohort=required`);
   }
 
