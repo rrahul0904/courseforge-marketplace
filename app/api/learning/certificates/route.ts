@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { requireRole } from "@/lib/auth/session";
 import { getDb } from "@/lib/db";
-import { canIssueCertificate } from "@/domain/learning.mjs";
+import { cohortCertificateDecision } from "@/domain/cohort-learning.mjs";
 
 const schema = z.object({ courseId: z.string().min(1) });
 
@@ -18,6 +18,11 @@ export async function POST(request: Request) {
       entitlement: true,
       certificate: true,
       progress: true,
+      capstoneSubmissions: {
+        include: { review: true },
+        orderBy: { revision: "desc" },
+        take: 1
+      },
       course: { include: { sections: { include: { lessons: { select: { id: true } } } } } }
     }
   });
@@ -29,8 +34,27 @@ export async function POST(request: Request) {
   const lessonIds = new Set(enrollment.course.sections.flatMap((section) => section.lessons.map((lesson) => lesson.id)));
   const completedLessons = enrollment.progress.filter((item) => item.completedAt && lessonIds.has(item.lessonId)).length;
   const totalLessons = lessonIds.size;
-  if (!canIssueCertificate({ entitlement: enrollment.entitlement, totalLessons, completedLessons })) {
-    return Response.json({ error: "Certificate requires active entitlement and 100% course completion" }, { status: 403 });
+  const latestSubmission = enrollment.capstoneSubmissions[0];
+  const decision = cohortCertificateDecision({
+    entitlement: enrollment.entitlement,
+    totalLessons,
+    completedLessons,
+    requiresCapstone: enrollment.course.requiresCapstone,
+    latestSubmission: latestSubmission ? {
+      status: latestSubmission.status,
+      revision: latestSubmission.revision,
+      review: latestSubmission.review ? {
+        decision: latestSubmission.review.decision,
+        reviewerKind: "FACULTY",
+        submissionRevision: latestSubmission.revision
+      } : null
+    } : null
+  });
+  if (!decision.allowed) {
+    return Response.json({
+      error: "Certificate requirements are not yet satisfied",
+      reason: decision.reason
+    }, { status: 403 });
   }
 
   const verificationCode = randomBytes(16).toString("hex");
