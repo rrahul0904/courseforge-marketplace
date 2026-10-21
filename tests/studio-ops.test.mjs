@@ -1,0 +1,33 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { assessSessionBooking, issueAttendanceToken, verifyAttendanceToken, assessCheckIn } from '../domain/studio-ops.mjs';
+
+const secret = 'studio-ops-test-secret-32-characters-minimum';
+const slot = { studioId:'studio-a', sessionId:'lesson-1', instructorId:'teacher-1', branchId:'branch-1', roomId:'room-1', startsAt:'2026-10-22T10:00:00-04:00', endsAt:'2026-10-22T11:00:00-04:00' };
+const next = { ...slot, sessionId:'lesson-2', startsAt:'2026-10-22T10:30:00-04:00', endsAt:'2026-10-22T11:30:00-04:00' };
+const tokenParams={ studioId:'studio-a', sessionId:'lesson-1', studentId:'student-1', enrolledStudentIds:['student-1'], issuedAt:1_800_000_000, secret };
+const verifyParams={ studioId:'studio-a', sessionId:'lesson-1', authenticatedStudentId:'student-1', now:1_800_000_100, secret };
+const checkIn={ session:slot, studioId:'studio-a', studentId:'student-1', authenticatedStudentId:'student-1', enrolledStudentIds:['student-1'], nowIso:'2026-10-22T10:15:00-04:00' };
+
+test('empty roster: valid session is bookable',()=>assert.deepEqual(assessSessionBooking(slot),{ok:true,reason:null}));
+test('same instructor overlap is rejected',()=>assert.equal(assessSessionBooking(next,[slot]).reason,'INSTRUCTOR_CONFLICT'));
+test('same room overlap is rejected with different instructors',()=>assert.equal(assessSessionBooking({...next,instructorId:'teacher-2'},[slot]).reason,'ROOM_CONFLICT'));
+test('different room and instructor can run concurrently',()=>assert.equal(assessSessionBooking({...next,instructorId:'teacher-2',roomId:'room-2'},[slot]).ok,true));
+test('other tenant booking cannot block this tenant',()=>assert.equal(assessSessionBooking(next,[{...slot,studioId:'studio-b'}]).ok,true));
+test('cancelled instructor booking is ignored',()=>assert.equal(assessSessionBooking(next,[{...slot,status:'CANCELLED'}]).ok,true));
+test('duplicate session ID is rejected',()=>assert.equal(assessSessionBooking(slot,[slot]).reason,'SESSION_EXISTS'));
+test('missing timezone is rejected',()=>assert.throws(()=>assessSessionBooking({...slot,startsAt:'2026-10-22T10:00:00'}),/timezone/));
+test('negative or too-short duration is rejected',()=>assert.throws(()=>assessSessionBooking({...slot,endsAt:'2026-10-22T10:05:00-04:00'}),/duration/));
+test('valid enrolled student gets signed token',()=>{const token=issueAttendanceToken(tokenParams);assert.deepEqual(verifyAttendanceToken({token,...verifyParams}),{studioId:'studio-a',sessionId:'lesson-1',studentId:'student-1'});});
+test('unenrolled student cannot obtain token',()=>assert.throws(()=>issueAttendanceToken({...tokenParams,enrolledStudentIds:[]}),/not enrolled/));
+test('tampered token signature is rejected',()=>{const token=issueAttendanceToken(tokenParams);assert.throws(()=>verifyAttendanceToken({token:token.slice(0,-3)+'bad',...verifyParams}),/signature/);});
+test('wrong authenticated student is rejected',()=>{const token=issueAttendanceToken(tokenParams);assert.throws(()=>verifyAttendanceToken({token,...verifyParams,authenticatedStudentId:'student-2'}),/subject mismatch/);});
+test('cross-tenant token use is rejected',()=>{const token=issueAttendanceToken(tokenParams);assert.throws(()=>verifyAttendanceToken({token,...verifyParams,studioId:'studio-b'}),/subject mismatch/);});
+test('expired token fails closed',()=>{const token=issueAttendanceToken(tokenParams);assert.throws(()=>verifyAttendanceToken({token,...verifyParams,now:1_800_000_700}),/not active/);});
+test('weak secret rejected',()=>assert.throws(()=>issueAttendanceToken({...tokenParams,secret:'weak'}),/secret/));
+test('authorized check-in succeeds',()=>assert.deepEqual(assessCheckIn(checkIn),{ok:true,reason:'CHECK_IN_ALLOWED',existing:false}));
+test('repeat check-in is idempotent',()=>assert.deepEqual(assessCheckIn({...checkIn,existingAttendance:[{studioId:'studio-a',sessionId:'lesson-1',studentId:'student-1'}]}),{ok:true,reason:'ALREADY_CHECKED_IN',existing:true}));
+test('cross-tenant attendance is rejected',()=>assert.equal(assessCheckIn({...checkIn,studioId:'studio-b'}).reason,'SUBJECT_MISMATCH'));
+test('non-enrolled attendance is rejected',()=>assert.equal(assessCheckIn({...checkIn,enrolledStudentIds:[]}).reason,'NOT_ENROLLED'));
+test('check-in outside the event window is rejected',()=>assert.equal(assessCheckIn({...checkIn,nowIso:'2026-10-22T07:00:00-04:00'}).reason,'OUTSIDE_ATTENDANCE_WINDOW'));
+test('unauthenticated impersonation rejected',()=>assert.equal(assessCheckIn({...checkIn,authenticatedStudentId:'student-2'}).reason,'SUBJECT_MISMATCH'));
