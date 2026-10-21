@@ -4,12 +4,12 @@ const ISO_WITH_ZONE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?
 const REQUIRED_ID = /^[A-Za-z0-9_-]{1,128}$/;
 
 function id(value, field) {
-  if (typeof value !== 'string' || !REQUIRED_ID.test(value)) throw new Error(\`invalid \${field}\`);
+  if (typeof value !== 'string' || !REQUIRED_ID.test(value)) throw new Error(`invalid ${field}`);
   return value;
 }
 function instant(value, field) {
   if (typeof value !== 'string' || !ISO_WITH_ZONE.test(value) || !Number.isFinite(Date.parse(value))) {
-    throw new Error(\`\${field} requires ISO-8601 with timezone\`);
+    throw new Error(`${field} requires ISO-8601 with timezone`);
   }
   return Date.parse(value);
 }
@@ -67,7 +67,7 @@ export function issueAttendanceToken({ studioId, sessionId, studentId, enrolledS
   if (!Number.isSafeInteger(issuedAt) || issuedAt <= 0) throw new Error('invalid issuedAt');
   if (!Number.isSafeInteger(ttlSeconds) || ttlSeconds < 30 || ttlSeconds > 900) throw new Error('invalid token TTL');
   const encoded = Buffer.from(JSON.stringify({ v: 1, studioId, sessionId, studentId, iat: issuedAt, exp: issuedAt + ttlSeconds })).toString('base64url');
-  return \`\${encoded}.\${mac(encoded, secret).toString('base64url')}\`;
+  return `${encoded}.${mac(encoded, secret).toString('base64url')}`;
 }
 
 /** MUST be called only AFTER authenticated student identity is established server-side. */
